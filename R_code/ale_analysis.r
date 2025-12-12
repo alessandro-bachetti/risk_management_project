@@ -71,7 +71,7 @@ table(data_clean$Risk_Level)
 num_vars <- names(data_clean)[sapply(data_clean, is.numeric)]
 
 # Categorical variables (character or factor type)
-cat_vars <- names(data_clean)[sapply(data_clean,function(x) is.character(x) | is.factor(x))]
+cat_vars <- names(data_clean)[sapply(data_clean, function(x) is.character(x) | is.factor(x))]
 
 # Convert them to factors
 data_clean[cat_vars] <- lapply(data_clean[cat_vars], as.factor)

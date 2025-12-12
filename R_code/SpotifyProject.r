@@ -1,11 +1,11 @@
 #####################################
-# 1. DATA CLEANING AND PREPARATION 
+# 1. DATA CLEANING AND PREPARATION
 #####################################
 
 ### PROVARE A RIDURRE CODICE CON TIDYVERSE
 
 # Prepare the environment
-rm(list=ls())
+rm(list = ls())
 library(rstudioapi)
 current_path <- getActiveDocumentContext()$path
 setwd(dirname(current_path))
@@ -13,7 +13,7 @@ print(getwd())
 
 # Load data
 library(openxlsx)
-data=read.csv("project_risk_raw_dataset.csv",  row.names = 1)
+data <- read.csv("project_risk_raw_dataset.csv",  row.names = 1)
 View(data)
 
 # Check the data
@@ -48,13 +48,13 @@ table(data$Change_Control_Maturity, useNA = "ifany")
 table(data$Risk_Management_Maturity, useNA = "ifany")
 
 # Critical: 355 High: 642 Low: 697 Medium: 1007
-# The result of removing missing values was either a small (1000 obs) or an imbalanced dataset 
-# that is why we opted for removing the 3 columns 
+# The result of removing missing values was either a small (1000 obs) or an imbalanced dataset  # nolint
+# that is why we opted for removing the 3 columns
 
 data$Tech_Environment_Stability <- NULL
 data$Change_Control_Maturity <- NULL
 data$Risk_Management_Maturity <- NULL
-# data[,names(data_clean)c("Risk_Management_Maturity","Change_Control_Maturity","")]
+# data[,names(data_clean)c("Risk_Management_Maturity","Change_Control_Maturity","")] # nolint
 
 data_clean <- na.omit(data)
 sum(is.na(data_clean))
@@ -66,7 +66,7 @@ table(data_clean$Risk_Level)
 num_vars <- names(data_clean)[sapply(data_clean, is.numeric)]
 
 # Categorical variables (character or factor type)
-cat_vars <- names(data_clean)[sapply(data_clean, function(x) is.character(x) | is.factor(x))]
+cat_vars <- names(data_clean)[sapply(data_clean, function(x) is.character(x) | is.factor(x))] # nolint
 
 # Convert them to factors
 data_clean[cat_vars] <- lapply(data_clean[cat_vars], as.factor)
@@ -81,7 +81,7 @@ data_clean[num_vars] <- scale(data_clean[num_vars])
 str(data_clean)
 
 #####################################
-# 2. EDA 
+# 2. EDA
 #####################################
 
 library(ggplot2)
@@ -92,15 +92,15 @@ str(num_vars)
 
 # Numercial variables plots
 numeric_plots <- lapply(num_vars, function(var) {
-  ggplot(data_clean, aes(x = .data[[var]])) + 
+  ggplot(data_clean, aes(x = .data[[var]])) +
     geom_histogram(bins = 30, fill = "skyblue", color = "black") +
     theme_minimal() +
     labs(title = var)
 })
 
-# Combine all plots into a grid 
+# Combine all plots into a grid
 final_numeric_plot <- wrap_plots(numeric_plots, ncol = 5)
-ggsave("numeric_plots.png", final_numeric_plot, width = 20, height = 15, units = "in", dpi = 300)
+ggsave("numeric_plots.png", final_numeric_plot, width = 20, height = 15, units = "in", dpi = 300) # nolint
 
 box_plots <- lapply(num_vars, function(var) {
   ggplot(data_clean, aes_string(x = var)) +
@@ -124,9 +124,9 @@ categorical_plots <- lapply(cat_vars, function(var) {
 })
 
 
-# Combine all plots into a grid 
+# Combine all plots into a grid
 final_cat_plot <- wrap_plots(categorical_plots, ncol = 5)
-ggsave("categorical_plots.png", final_cat_plot, width = 20, height = 15, units = "in", dpi = 300)
+ggsave("categorical_plots.png", final_cat_plot, width = 20, height = 15, units = "in", dpi = 300) # nolint
 
 # CORRELATION MATRIX
 
@@ -136,30 +136,30 @@ library(corrplot)
 library(ggcorrplot)
 
 cor_mat <- cor(data_num)
-corr_plot <- ggcorrplot(cor_mat, lab = TRUE, lab_size = 3, type = "lower", outline.col = "white", colors = c("blue", "white", "red")) + coord_fixed()
+corr_plot <- ggcorrplot(cor_mat, lab = TRUE, lab_size = 3, type = "lower", outline.col = "white", colors = c("blue", "white", "red")) + coord_fixed() # nolint
 ggsave("correlation_matrix.png", corr_plot, width = 15, height = 15, dpi = 300)
 
 corrplot(cor_mat, type = "upper", method = "ellipse", tl.cex = 0.9)
 
 ### 3. PCA ###
 
-pca_data <- princomp(data_num, cor=TRUE, scores=TRUE)
+pca_data <- princomp(data_num, cor = TRUE, scores = TRUE)
 
-print(summary(pca_data),loading=TRUE)
+print(summary(pca_data), loading = TRUE)
 
 # Scree plot
 library(factoextra)
 fviz_eig(pca_data, ncp = ncol(pca_data$loadings))
 
-#Biplot 
-fviz_pca_biplot(pca_data, repel = TRUE, 
+#Biplot
+fviz_pca_biplot(pca_data, repel = TRUE,
                 col.var = "steelblue",
-                col.ind = "orange") 
+                col.ind = "orange")
 # Contributions of variables to PCs
-fviz_contrib(pca_data, choice = "var", axes = 1, top = 10)  # PC1 - how big the project is/ project demographics
-fviz_contrib(pca_data, choice = "var", axes = 2, top = 10)  # PC2 - seasonal factor
-fviz_contrib(pca_data, choice = "var", axes = 3, top = 10)  # PC3 - 
-fviz_contrib(pca_data, choice = "var", axes = 4, top = 10)  # PC4 - 
+fviz_contrib(pca_data, choice = "var", axes = 1, top = 10)  # PC1 - how big the project is/ project demographics # nolint
+fviz_contrib(pca_data, choice = "var", axes = 2, top = 10)  # PC2 - seasonal factor # nolint
+fviz_contrib(pca_data, choice = "var", axes = 3, top = 10)  # PC3 -
+fviz_contrib(pca_data, choice = "var", axes = 4, top = 10)  # PC4 -
 fviz_contrib(pca_data, choice = "var", axes = 5, top = 10)  # PC5
 fviz_contrib(pca_data, choice = "var", axes = 6, top = 10)  # PC6
 fviz_contrib(pca_data, choice = "var", axes = 7, top = 10)  # PC7
@@ -169,19 +169,19 @@ fviz_contrib(pca_data, choice = "var", axes = 10, top = 10) # PC10
 
 
 # Control variable colors using their contributions to the principle axis
-fviz_pca_var(pca_data, col.var="contrib",
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-             repel = TRUE # Avoid text overlapping
+fviz_pca_var(pca_data, col.var = "contrib",
+  gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+  repel = TRUE # Avoid text overlapping
 ) + theme_minimal() + ggtitle("Variables - PCA")
 
 #####################################
-# 5. LINEAR REGRESSION MODEL 
+# 5. LINEAR REGRESSION MODEL
 #####################################
 
 data_clean$Risk_Binary <- ifelse(
   data_clean$Risk_Level %in% c("Critical", "High"), 1, 0
 )
-data_clean$Risk_Binary <- factor(data_clean$Risk_Binary, levels = c(0,1))
+data_clean$Risk_Binary <- factor(data_clean$Risk_Binary, levels = c(0, 1))
 data_clean$Risk_Binary <- as.numeric(as.character(data_clean$Risk_Binary))
 
 table(as.factor(data_clean$Risk_Binary))
@@ -191,7 +191,7 @@ lm_full <- lm(Risk_Binary ~ . - Risk_Level,
 summary(lm_full)
 
 # residuals
-e=lm_full$residuals
+e = lm_full$residuals
 
 
 # Normality - NO
