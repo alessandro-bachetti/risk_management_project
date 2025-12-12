@@ -141,6 +141,38 @@ ggsave("correlation_matrix.png", corr_plot, width = 15, height = 15, dpi = 300)
 
 corrplot(cor_mat, type = "upper", method = "ellipse", tl.cex = 0.9)
 
+  ### Selection of Cathegorical variables
+library(vcd)  
+
+# Create empty matrix
+n <- length(cat_vars)
+cramer_matrix <- matrix(NA, nrow = n, ncol = n,
+                        dimnames = list(cat_vars, cat_vars))
+
+# Loop through all pairs
+for(i in 1:n){
+  for(j in 1:n){
+    if (i != j) {
+      tab <- table(data_clean[[cat_vars[i]]], data_clean[[cat_vars[j]]])
+      cramer_matrix[i, j] <- assocstats(tab)$cramer
+    } else {
+      cramer_matrix[i, j] <- 1   # variable with itself
+    }
+  }
+}
+
+cramer_matrix
+corrplot(cramer_matrix,
+         type = "upper",
+         method = "color",
+         col = colorRampPalette(c("white", "blue"))(200),
+         tl.cex = 0.8,
+         addCoef.col = "black",
+         number.cex = 0.5,
+         diag = FALSE,
+         cl.lim = c(0, 1))
+                                   
+
 ### 3. PCA ###
 
 pca_data <- princomp(data_num, cor = TRUE, scores = TRUE)
@@ -369,6 +401,45 @@ fviz_cluster(
   list(data = data_clean, cluster = member_co_2),
   ellipse.type = "norm"
 )
+# DAISY clustering
+library(Rtsne)
+library(ISLR) 
 
+gower_dist <- daisy(data_clean[, -1],
+                    metric = "gower",
+                    type = list(logratio = 3))
+
+summary(gower_dist)
+gower_mat <- as.matrix(gower_dist)
+View(head(gower_mat))
+# Output most similar pair
+data_clean[
+  which(gower_mat == min(gower_mat[gower_mat != min(gower_mat)]),
+        arr.ind = TRUE)[1, ], ]
+# Silhouette
+sil_width <- c(NA)
+sil_width=NULL
+
+for(i in 2:10){
+  
+  pam_fit <- pam(gower_dist,
+                 diss = TRUE,
+                 k = i)
+  
+  sil_width[i] <- pam_fit$silinfo$avg.width
+  
+}
+## plot the silhouette width
+plot(1:10, sil_width,
+     xlab = "Number of clusters",
+     ylab = "Silhouette Width")
+lines(1:10, sil_width)
+
+# the best k is still 2 but s=0.02
+pam_fit <- pam(gower_dist,diss = TRUE,k = 2)
+plot(silhouette(pam_fit))
+
+pam_results$the_summary
+data_clean[pam_fit$medoids, ]
 ### 7. SUMMARY ###
 
