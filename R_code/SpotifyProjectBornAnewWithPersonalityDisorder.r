@@ -23,35 +23,31 @@ getmode <- function(v) {
 # --- 2. CARICAMENTO DATI E PULIZIA BASE ---
 df <- read_csv("project_risk_raw_dataset.csv")
 
-# Rimozione Project_ID ###corregere
-if ("Project_ID" %in% names(df)) {
-    df <- df[, names(df) != "Project_ID"]
-}
-
+# Rimozione Project_ID 
+df <- df[,-1]
 # Definizione Target: "Low" come baseline di riferimento
 target_col <- "Risk_Level"
 df[[target_col]] <- factor(df[[target_col]], 
                            levels = c("Low", "Medium", "High", "Critical"))
 
-cat("Dati caricati. Inizio pre-elaborazione...\n")
 
-# --- 3. IMPUTAZIONE E SCALATURA DEI VALORI NUMERICI ---
-cat("\n--- Imputazione NA e Scalatura (Standardizzazione Z-score) ---\n")
+
+# --- 3. RIMOZIONE na E SCALATURA DEI VALORI NUMERICI ---
 
 num_cols_originali <- names(df)[sapply(df, is.numeric)]
 
 for (col in names(df)) {
   if (col != target_col) {
     if (is.numeric(df[[col]])) {
-      # 3a. Imputazione Numerica (Mediana)
+      #Sostituzione Numerica (Mediana)
       if (any(is.na(df[[col]]))) {
         df[[col]][is.na(df[[col]])] <- median(df[[col]], na.rm = TRUE)
       }
-      # 3b. SCALATURA (Standardizzazione Z-score: (x-mean)/sd)
+      #Scaling (Standardizzazione : (x-mean)/sd)
       df[[col]] <- scale(df[[col]])
       
     } else {
-      # 3c. Imputazione Categorica (Moda)
+      #Sostituzione Categorica (Moda)
       df[[col]] <- as.factor(df[[col]])
       if (any(is.na(df[[col]]))) {
         df[[col]][is.na(df[[col]])] <- getmode(df[[col]])
@@ -59,13 +55,21 @@ for (col in names(df)) {
     }
   }
 }
-cat("Imputazione e Scalatura completate. NA rimasti:", sum(is.na(df)), "\n")
 
 # --- 4. FEATURE SELECTION (Usando i dati SCALATI) ---
-# Selezioniamo le variabili migliori come fatto in precedenza
 num_cols_scalate <- names(df)[sapply(df, is.numeric)]
 
 ### Correlation Matrix da fare e pulizia delle le variabili a priori su base corr###
+# CORRELATION MATRIX
+
+library(corrplot)
+library(ggcorrplot)
+
+cor_mat <- cor(df[,num_cols_scalate])
+corr_plot <- ggcorrplot(cor_mat, lab = TRUE, lab_size = 3, type = "lower", outline.col = "white", colors = c("blue", "white", "red")) + coord_fixed() 
+#ggsave("correlation_matrix.png", corr_plot, width = 15, height = 15, dpi = 300)
+
+corrplot(cor_mat, type = "upper", method = "ellipse", tl.cex = 0.9)
 
 
 p_vals_num <- sapply(num_cols_scalate, function(x) {
@@ -73,13 +77,16 @@ p_vals_num <- sapply(num_cols_scalate, function(x) {
 })
 
 #pca per confronto ad ANOVA/Sostituzione di ANOVA -> Uso pca per selection 
+#PCA
+pca_data <- princomp(data_num, cor = TRUE, scores = TRUE)
 
+print(summary(pca_data), loading = TRUE)
 top_numeric <- names(sort(p_vals_num)[1:6])
 
 cat_cols <- names(df)[sapply(df, is.factor)]
 cat_cols <- cat_cols[cat_cols != target_col]
 
-###vedi  con V-Cramer TRA LE VARIABILI A MO' DI CORR-MATRIX per pulizia
+###vedi  con V-Cramer TRA LE VARIABILI Qualitative A MO' DI CORR-MATRIX per pulizia
 ### e chi-quadro per selezione
 
 p_vals_cat <- sapply(cat_cols, function(x) {
