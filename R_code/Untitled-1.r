@@ -36,7 +36,7 @@ for (col in names(df)) {
   if (col != target_col) {
     if (is.numeric(df[[col]])) {
       df[[col]][is.na(df[[col]])] <- median(df[[col]], na.rm = TRUE)
-      df[[col]] <- as.numeric(scale(df[[col]])) # Scalatura immediata
+      df[[col]] <- as.numeric(scale(df[[col]])) # Scaling 
     } else {
       df[[col]] <- as.factor(df[[col]])
       df[[col]][is.na(df[[col]])] <- getmode(df[[col]])
@@ -155,3 +155,13 @@ plot(roc_obj, main = paste("ROC Curve (AUC =", round(auc_val, 3), ")"), col = "b
 lda_p <- predict(m_lda, data_test)
 lda_df <- data.frame(Risk = data_test$Risk_Level, lda_p$x)
 ggplot(lda_df, aes(x=LD1, y=LD2, color=Risk)) + geom_point() + stat_ellipse() + theme_minimal()
+###aggiungere plot lda binaria
+# Plot LDA Binaria
+lda_p_bin <- predict(m_lda_bin, data_test_bin)
+# In LDA binaria abbiamo solo 1 discriminante (LD1)
+lda_df_bin <- data.frame(Risk = data_test_bin$Risk_Binary, LD1 = lda_p_bin$x)
+
+ggplot(lda_df_bin, aes(x=LD1, fill=Risk)) +
+  geom_density(alpha=0.5) +
+  labs(title="Distribuzione LD1 - Modello Binario", x="Linear Discriminant 1", fill="Rischio") +
+  theme_minimal()
