@@ -1,3 +1,4 @@
+just a try for github cli test on ubuntu linux 
 # --- 1. LIBRERIE NECESSARIE ---
 # Assicurati che i pacchetti siano installati e caricati
 library(nnet)
