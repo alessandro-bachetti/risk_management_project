@@ -29,10 +29,10 @@ getmode <- function(v) {
 }
 
 #####################################################
-# 2. DATA CLEANING & IMPUTATION + OOVERALL EDA
+# 2. DATA CLEANING & IMPUTATION + OVERALL EDA
 #####################################################
 
-# Ciclo for per imputazione (Moda/Mediana) + scaling
+# Ciclo for per controllo e sostituzione NA (Moda/Mediana) + scaling quantitative
 target_col <- "Risk_Level"
 for (col in names(df)) {
   if (col != target_col) {
@@ -101,7 +101,7 @@ ggsave("categorical_plots.png", final_cat_plot, width = 20, height = 15, units =
 
 # 3.1 Pulizia a priori: Correlazione (> 0.7)
 cor_mat <- cor(df[num_vars])
-corrplot(cor_mat, type = "upper", method = "ellipse", tl.cex = 0.9)
+corrplot(cor_mat, type = "upper", method = "ellipse", tl.cex = 0.7)
 high_corr <- findCorrelation(cor_mat, cutoff = 0.7, names = TRUE)
 print(high_corr)
 num_vars_filtered <- setdiff(num_vars, high_corr)
