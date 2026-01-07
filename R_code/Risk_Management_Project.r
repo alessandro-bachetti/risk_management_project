@@ -29,10 +29,10 @@ getmode <- function(v) {
 }
 
 #####################################################
-# 2. DATA CLEANING & IMPUTATION + OOVERALL EDA
+# 2. DATA CLEANING & IMPUTATION + OVERALL EDA
 #####################################################
 
-# Ciclo for per imputazione (Moda/Mediana) + scaling
+# Ciclo for per controllo e sostituzione NA (Moda/Mediana) + scaling quantitative
 target_col <- "Risk_Level"
 for (col in names(df)) {
   if (col != target_col) {
@@ -91,7 +91,7 @@ categorical_plots <- lapply(cat_vars, function(var) {
 
 # Combine all plots into a grid
 final_cat_plot <- wrap_plots(categorical_plots, ncol = 5)
-ggsave("categorical_plots.png", final_cat_plot, width = 20, height = 15, units = "in", dpi = 300)
+#ggsave("categorical_plots.png", final_cat_plot, width = 20, height = 15, units = "in", dpi = 300)
 
 
 #####################################################
@@ -101,7 +101,7 @@ ggsave("categorical_plots.png", final_cat_plot, width = 20, height = 15, units =
 
 # 3.1 Pulizia a priori: Correlazione (> 0.7)
 cor_mat <- cor(df[num_vars])
-corrplot(cor_mat, type = "upper", method = "ellipse", tl.cex = 0.9)
+corrplot(cor_mat, type = "upper", method = "ellipse", tl.cex = 0.7)
 high_corr <- findCorrelation(cor_mat, cutoff = 0.7, names = TRUE)
 print(high_corr)
 num_vars_filtered <- setdiff(num_vars, high_corr)
@@ -158,14 +158,19 @@ for(i in 1:n){
 }
 
 corrplot(cramer_matrix,
+         tl.srt = 45,
          type = "upper",
-         method = "color",
+         method = "ellipse",
          col = colorRampPalette(c("white", "blue"))(200),
          tl.cex = 0.8,
          addCoef.col = "black",
          number.cex = 0.5,
          diag = FALSE,
-         cl.lim = c(0, 1))
+         is.corr = FALSE,
+         # Margini: c(basso, sinistra, alto, destra)
+         mar = c(0, 0, 3, 0))
+
+mtext("Cramér's V", side = 3, line = -10, cex = 1.2, adj = 0.55)
 
 to_keep_cat <- cat_vars
 if(length(cat_vars) > 1) {
@@ -201,7 +206,7 @@ data_test  <- df_model[-trainIndex,]
 # Logit Multinomiale
 m_logit <- multinom(Risk_Level ~ ., data = data_train, trace = FALSE)
 acc_logit <- confusionMatrix(predict(m_logit, data_test), data_test[[target_col]])$overall['Accuracy']
-vif(m_logit)
+
 
 # LDA Multinomiale
 m_lda <- lda(Risk_Level ~ ., data = data_train)
