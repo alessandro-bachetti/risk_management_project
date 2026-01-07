@@ -163,11 +163,11 @@ corrplot(cramer_matrix,
          type = "upper",
          method = "ellipse",
          col = colorRampPalette(c("white", "blue"))(200),
-         tl.cex = 0.6,
+         tl.cex = 0.8,
          addCoef.col = "black",
-         number.cex = 0.4,
+         number.cex = 0.5,
          diag = FALSE,
-         cl.lim = c(0, 1),
+         is.corr = FALSE,
          # Margini: c(basso, sinistra, alto, destra)
          mar = c(0, 0, 2, 0))
 
