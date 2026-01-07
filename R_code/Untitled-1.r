@@ -158,14 +158,18 @@ for(i in 1:n){
 }
 
 corrplot(cramer_matrix,
+         title = "Cramér's V",
+         tl.srt = 45,
          type = "upper",
-         method = "color",
+         method = "ellipse",
          col = colorRampPalette(c("white", "blue"))(200),
-         tl.cex = 0.8,
+         tl.cex = 0.6,
          addCoef.col = "black",
-         number.cex = 0.5,
+         number.cex = 0.4,
          diag = FALSE,
-         cl.lim = c(0, 1))
+         cl.lim = c(0, 1),
+         # Margini: c(basso, sinistra, alto, destra)
+         mar = c(0, 0, 2, 0))
 
 to_keep_cat <- cat_vars
 if(length(cat_vars) > 1) {
@@ -201,7 +205,7 @@ data_test  <- df_model[-trainIndex,]
 # Logit Multinomiale
 m_logit <- multinom(Risk_Level ~ ., data = data_train, trace = FALSE)
 acc_logit <- confusionMatrix(predict(m_logit, data_test), data_test[[target_col]])$overall['Accuracy']
-vif(m_logit)
+
 
 # LDA Multinomiale
 m_lda <- lda(Risk_Level ~ ., data = data_train)
