@@ -258,5 +258,5 @@ print(results)
 cat("\nAUC Modello Binario:", round(auc_val, 4), "\n")
 
 # Plot ROC
-plot(roc_obj, main = paste("ROC Curve (AUC =", round(auc_val, 3), ")"), col = "blue")
-
+#plot(roc_obj, main = paste("ROC Curve (AUC =", round(auc_val, 3), ")"), col = "blue")
+plot(roc_obj, xlab='1-specificity',ylab='sensitivity' ) 
