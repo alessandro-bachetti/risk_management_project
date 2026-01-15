@@ -1,2 +1,3 @@
 # risk_management_project
-A Project Management Risk Evaluation
+A risk management project applied in the field of Project Management. 
+Techniques used: PCA, LDA, Multinomial logistic regression, Binary Logit.
