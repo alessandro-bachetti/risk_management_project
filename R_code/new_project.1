@@ -177,3 +177,24 @@ cat("\n--- NOTE INTERPRETATIVE ---\n")
 cat("• Coefficienti β rappresentano variazioni nel log-odds cumulativo per un incremento di 1 SD della variabile.\n")
 cat("• Cut-points (ζ) definiscono i confini stimati tra categorie di rischio.\n")
 cat("• Se il test di parallel slopes fallisce, discutere il possibile uso di un modello multinomiale o di un partial proportional odds model.\n")
+
+#####################################################
+# 9. ODDS RATIOS AND CONFIDENCE INTERVALS
+#####################################################
+
+# Exponentiate the coefficients to get Odds Ratios
+odds_ratios <- exp(coef(ordinal_model))
+
+# Calculate Confidence Intervals (using default Wald intervals)
+# Use confint.default for speed, or confint(ordinal_model) for profile likelihood
+ci <- exp(confint.default(ordinal_model))
+
+# Combine into a clean table
+or_table <- cbind(Odds_Ratio = odds_ratios, ci)
+
+print("--- Odds Ratios and 95% Confidence Intervals ---")
+print(round(or_table, 4))
+
+# Interpretation Helper:
+# OR > 1: Increase in variable increases probability of higher Risk_Level
+# OR < 1: Increase in variable decreases probability of higher Risk_Level
