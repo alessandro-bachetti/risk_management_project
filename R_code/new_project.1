@@ -5,16 +5,16 @@ rm(list = ls())
 library(rstudioapi)
 library(nnet)
 library(car) 
-library(caret)
-library(dplyr)
+library(caret) 
+library(dplyr) 
 library(readr)
 library(MASS)
 library(ggplot2)
 library(patchwork)
 library(corrplot)
-library(vcd)       
-library(factoextra)
-library(pROC)
+library(vcd)       # Per V-Cramer
+library(factoextra) # Per PCA visualization
+library(pROC)       # Per ROC/AUC
 
 current_path <- getActiveDocumentContext()$path
 setwd(dirname(current_path))
@@ -29,7 +29,7 @@ getmode <- function(v) {
 }
 
 #####################################################
-# 2. DATA CLEANING & IMPUTATION + EDA
+# 2. DATA CLEANING & IMPUTATION + OVERALL EDA
 #####################################################
 
 target_col <- "Risk_Level"
@@ -37,7 +37,7 @@ for (col in names(df)) {
   if (col != target_col) {
     if (is.numeric(df[[col]])) {
       df[[col]][is.na(df[[col]])] <- median(df[[col]], na.rm = TRUE)
-      df[[col]] <- as.numeric(scale(df[[col]])) # Scaling 
+      # 🔹 NOTA: Scaling rimosso da qui per evitare data leakage
     } else {
       df[[col]] <- as.factor(df[[col]])
       df[[col]][is.na(df[[col]])] <- getmode(df[[col]])
@@ -45,51 +45,58 @@ for (col in names(df)) {
   }
 }
 
-# 🔹 CORREZIONE: variabile target ordinata correttamente
-df[[target_col]] <- factor(df[[target_col]],
-                           levels = c("Low", "Medium", "High", "Critical"),
+# Variabile target ordinata correttamente
+df[[target_col]] <- factor(df[[target_col]], 
+                           levels = c("Low", "Medium", "High", "Critical"), 
                            ordered = TRUE)
 
+# --- EDA PLOTS (Mantenuti dall'originale) ---
+num_vars <- names(df)[sapply(df, is.numeric)]
+numeric_plots <- lapply(num_vars, function(var) {
+  ggplot(df, aes(x = .data[[var]])) +
+    geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+    theme_minimal() + labs(title = var)
+})
+final_numeric_plot <- wrap_plots(numeric_plots, ncol = 5)
+
+cat_vars <- names(df)[sapply(df, is.factor)]
+cat_vars <- cat_vars[cat_vars != target_col]
+categorical_plots <- lapply(cat_vars, function(var) {
+  ggplot(df, aes(x = .data[[var]])) +
+    geom_bar(fill = "coral") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = var)
+})
+final_cat_plot <- wrap_plots(categorical_plots, ncol = 5)
+
 #####################################################
-# 3. FEATURE SELECTION (NUMERICHE: CORR, ANOVA, PCA)
+# 3. FEATURE SELECTION (NUMERICHE)
 #####################################################
 
-num_vars <- names(df)[sapply(df, is.numeric)]
 cor_mat <- cor(df[num_vars])
 high_corr <- findCorrelation(cor_mat, cutoff = 0.7, names = TRUE)
 num_vars_filtered <- setdiff(num_vars, high_corr)
 
-# ANOVA (Top 5 variabili discriminanti)
+# ANOVA (Top 5)
 p_vals_anova <- sapply(num_vars_filtered, function(x) {
   summary(aov(df[[x]] ~ df[[target_col]]))[[1]][["Pr(>F)"]][1]
 })
 top_anova <- names(sort(p_vals_anova)[1:5])
 
-# PCA come “setaccio”: scegli variabili più rappresentative su PC1 e PC2
+# PCA (Visualizzazione e Contributi)
 pca_res <- princomp(df[num_vars_filtered], cor = TRUE)
-print(summary(pca_res), loading = TRUE)
+fviz_pca_var(pca_res, col.var = "contrib", gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), repel = TRUE)
 
-# 🔹 Aggiunto: stampa dei loadings per la giustificazione teorica
-print("--- PCA Loadings ---")
-print(round(pca_res$loadings[, 1:2], 3))
-
-# Calcolo del contributo combinato su PC1 e PC2
 contributions <- rowSums(pca_res$loadings[, 1:2]^2)
 top_pca <- names(sort(contributions, decreasing = TRUE)[1:5])
 
-# Selezione finale numeriche (evitando duplicati)
 final_num_vars <- unique(c(top_anova, top_pca))
-print("--- Variabili numeriche selezionate ---")
-print(final_num_vars)
 
 #####################################################
-# 4. FEATURE SELECTION (CATEGORICHE: V-CRAMER, CHI-SQ)
+# 4. FEATURE SELECTION (CATEGORICHE)
 #####################################################
 
-cat_vars <- names(df)[sapply(df, is.factor)]
-cat_vars <- cat_vars[cat_vars != target_col]
-
-# Rimozione ridondanze basata sul V di Cramér
 to_keep_cat <- cat_vars
 if(length(cat_vars) > 1) {
   for(i in 1:(length(cat_vars)-1)) {
@@ -100,101 +107,73 @@ if(length(cat_vars) > 1) {
   }
 }
 
-# Selezione Chi^2 (Top 5 rispetto al target)
 p_vals_chi <- sapply(to_keep_cat, function(x) {
   chisq.test(table(df[[x]], df[[target_col]]))$p.value
 })
 top_categorical <- names(sort(p_vals_chi)[1:min(5, length(p_vals_chi))])
 
-# Dataset finale per i modelli
+# Dataset finale
 final_vars <- c(target_col, final_num_vars, top_categorical)
 df_model <- df[, final_vars]
-print("--- Variabili categoriche selezionate ---")
-print(top_categorical)
 
 #####################################################
-# 5. MODELLO ORDERED LOGIT
+# 5. SPLIT E SCALING (CORREZIONE DATA LEAKAGE)
 #####################################################
-
 set.seed(123)
 trainIndex <- createDataPartition(df_model[[target_col]], p = .7, list = FALSE)
 data_train <- df_model[trainIndex,]
 data_test  <- df_model[-trainIndex,]
 
+# Scaling basato SOLO su training set
+numeric_in_model <- intersect(names(data_train), final_num_vars)
+scaling_params <- preProcess(data_train[, numeric_in_model], method = c("center", "scale"))
+
+data_train[, numeric_in_model] <- predict(scaling_params, data_train[, numeric_in_model])
+data_test[, numeric_in_model]  <- predict(scaling_params, data_test[, numeric_in_model])
+
+#####################################################
+# 6. MODELLO ORDERED LOGIT (POLR)
+#####################################################
+
 ordinal_model <- polr(Risk_Level ~ ., data = data_train, Hess = TRUE)
 
-print("--- Sommario del Modello Ordered Logit ---")
-summary_model <- summary(ordinal_model)
-
-# Calcolo manuale dei p-value
-ctable <- coef(summary_model)
-p_values <- pnorm(abs(ctable[, "t value"]), lower.tail = FALSE) * 2
-ctable_with_p <- cbind(ctable, "p value" = round(p_values, 4))
+# Sommario con p-value
+summary_m <- summary(ordinal_model)
+ctable <- coef(summary_m)
+p_vals <- pnorm(abs(ctable[, "t value"]), lower.tail = FALSE) * 2
+ctable_with_p <- cbind(ctable, "p value" = round(p_vals, 4))
 print("--- Coefficienti, t-value e p-value ---")
 print(ctable_with_p)
 
 #####################################################
-# 6. VALUTAZIONE MODELLO
+# 7. ODDS RATIOS & CONFIDENCE INTERVALS
 #####################################################
 
-predictions <- predict(ordinal_model, newdata = data_test)
-print("--- Matrice di Confusione ---")
-print(confusionMatrix(predictions, data_test$Risk_Level))
-
-# 🔹 ROC multiclass indiretta (One vs Rest)
-prob_pred <- predict(ordinal_model, newdata = data_test, type = "probs")
-auc_values <- sapply(1:ncol(prob_pred), function(i) {
-  roc(as.numeric(data_test$Risk_Level == colnames(prob_pred)[i]), prob_pred[, i])$auc
-})
-print("--- AUC per ciascun livello ---")
-print(round(auc_values, 3))
-
-#####################################################
-# 7. TEST CRITICO: ASSUNZIONE DI PARALLEL SLOPES
-#####################################################
-
-# 🔹 Confronto devianza tra modello ordinal (polr) e multinomiale (nnet::multinom)
-multi_model <- multinom(Risk_Level ~ ., data = data_train, trace = FALSE)
-dev_diff <- 2 * (logLik(multi_model) - logLik(ordinal_model))
-df_diff <- attr(logLik(multi_model), "df") - attr(logLik(ordinal_model), "df")
-p_val_diff <- pchisq(dev_diff, df = df_diff, lower.tail = FALSE)
-
-print("--- Test sull’assunzione di proportional odds ---")
-cat("Differenza di devianza =", round(dev_diff,3), 
-    " | df =", df_diff, 
-    " | p-value =", signif(p_val_diff, 4), "\n")
-
-if (p_val_diff < 0.05) {
-  cat("⚠️  L’assunzione di parallel slopes è VIOLATA: considerare modello multinomiale.\n")
-} else {
-  cat("✅  L’assunzione di parallel slopes è plausibile: ordered logit appropriato.\n")
-}
-
-#####################################################
-# 8. OSSERVAZIONI INTERPRETATIVE
-#####################################################
-cat("\n--- NOTE INTERPRETATIVE ---\n")
-cat("• Coefficienti β rappresentano variazioni nel log-odds cumulativo per un incremento di 1 SD della variabile.\n")
-cat("• Cut-points (ζ) definiscono i confini stimati tra categorie di rischio.\n")
-cat("• Se il test di parallel slopes fallisce, discutere il possibile uso di un modello multinomiale o di un partial proportional odds model.\n")
-
-#####################################################
-# 9. ODDS RATIOS AND CONFIDENCE INTERVALS
-#####################################################
-
-# Exponentiate the coefficients to get Odds Ratios
-odds_ratios <- exp(coef(ordinal_model))
-
-# Calculate Confidence Intervals (using default Wald intervals)
-# Use confint.default for speed, or confint(ordinal_model) for profile likelihood
-ci <- exp(confint.default(ordinal_model))
-
-# Combine into a clean table
-or_table <- cbind(Odds_Ratio = odds_ratios, ci)
-
-print("--- Odds Ratios and 95% Confidence Intervals ---")
+# 🔹 AGGIUNTA: Calcolo Odds Ratio 
+or_table <- exp(cbind(OR = coef(ordinal_model), confint.default(ordinal_model)))
+print("--- Odds Ratios and 95% CI ---")
 print(round(or_table, 4))
 
-# Interpretation Helper:
-# OR > 1: Increase in variable increases probability of higher Risk_Level
-# OR < 1: Increase in variable decreases probability of higher Risk_Level
+#####################################################
+# 8. VALUTAZIONE E ASSUNZIONI
+#####################################################
+
+# Accuracy e Matrice Confusione
+preds <- predict(ordinal_model, newdata = data_test)
+print(confusionMatrix(preds, data_test$Risk_Level))
+
+# AUC Multiclass
+probs <- predict(ordinal_model, newdata = data_test, type = "probs")
+auc_vals <- sapply(1:ncol(probs), function(i) {
+  roc(as.numeric(data_test$Risk_Level == colnames(probs)[i]), probs[, i])$auc
+})
+print("--- AUC per Level ---")
+print(round(auc_vals, 3))
+
+# Test Parallel Slopes (Multinomial vs Ordinal)
+multi_check <- multinom(Risk_Level ~ ., data = data_train, trace = FALSE)
+p_val_slopes <- pchisq(2 * (logLik(multi_check) - logLik(ordinal_model)), 
+                       df = attr(logLik(multi_check), "df") - attr(logLik(ordinal_model), "df"), 
+                       lower.tail = FALSE)
+
+cat("\nTest Parallel Slopes p-value:", round(p_val_slopes, 4), "\n")
