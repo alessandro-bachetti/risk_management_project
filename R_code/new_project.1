@@ -1,0 +1,179 @@
+#####################################################
+# 1. SETUP E LIBRERIE
+#####################################################
+rm(list = ls())
+library(rstudioapi)
+library(nnet)
+library(car) 
+library(caret)
+library(dplyr)
+library(readr)
+library(MASS)
+library(ggplot2)
+library(patchwork)
+library(corrplot)
+library(vcd)       
+library(factoextra)
+library(pROC)
+
+current_path <- getActiveDocumentContext()$path
+setwd(dirname(current_path))
+
+# Caricamento dati
+df <- read.csv("project_risk_raw_dataset.csv", row.names = 1)
+
+# Funzione per la moda
+getmode <- function(v) {
+  uniqv <- unique(na.omit(v))
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+#####################################################
+# 2. DATA CLEANING & IMPUTATION + EDA
+#####################################################
+
+target_col <- "Risk_Level"
+for (col in names(df)) {
+  if (col != target_col) {
+    if (is.numeric(df[[col]])) {
+      df[[col]][is.na(df[[col]])] <- median(df[[col]], na.rm = TRUE)
+      df[[col]] <- as.numeric(scale(df[[col]])) # Scaling 
+    } else {
+      df[[col]] <- as.factor(df[[col]])
+      df[[col]][is.na(df[[col]])] <- getmode(df[[col]])
+    }
+  }
+}
+
+# 🔹 CORREZIONE: variabile target ordinata correttamente
+df[[target_col]] <- factor(df[[target_col]],
+                           levels = c("Low", "Medium", "High", "Critical"),
+                           ordered = TRUE)
+
+#####################################################
+# 3. FEATURE SELECTION (NUMERICHE: CORR, ANOVA, PCA)
+#####################################################
+
+num_vars <- names(df)[sapply(df, is.numeric)]
+cor_mat <- cor(df[num_vars])
+high_corr <- findCorrelation(cor_mat, cutoff = 0.7, names = TRUE)
+num_vars_filtered <- setdiff(num_vars, high_corr)
+
+# ANOVA (Top 5 variabili discriminanti)
+p_vals_anova <- sapply(num_vars_filtered, function(x) {
+  summary(aov(df[[x]] ~ df[[target_col]]))[[1]][["Pr(>F)"]][1]
+})
+top_anova <- names(sort(p_vals_anova)[1:5])
+
+# PCA come “setaccio”: scegli variabili più rappresentative su PC1 e PC2
+pca_res <- princomp(df[num_vars_filtered], cor = TRUE)
+print(summary(pca_res), loading = TRUE)
+
+# 🔹 Aggiunto: stampa dei loadings per la giustificazione teorica
+print("--- PCA Loadings ---")
+print(round(pca_res$loadings[, 1:2], 3))
+
+# Calcolo del contributo combinato su PC1 e PC2
+contributions <- rowSums(pca_res$loadings[, 1:2]^2)
+top_pca <- names(sort(contributions, decreasing = TRUE)[1:5])
+
+# Selezione finale numeriche (evitando duplicati)
+final_num_vars <- unique(c(top_anova, top_pca))
+print("--- Variabili numeriche selezionate ---")
+print(final_num_vars)
+
+#####################################################
+# 4. FEATURE SELECTION (CATEGORICHE: V-CRAMER, CHI-SQ)
+#####################################################
+
+cat_vars <- names(df)[sapply(df, is.factor)]
+cat_vars <- cat_vars[cat_vars != target_col]
+
+# Rimozione ridondanze basata sul V di Cramér
+to_keep_cat <- cat_vars
+if(length(cat_vars) > 1) {
+  for(i in 1:(length(cat_vars)-1)) {
+    for(j in (i+1):length(cat_vars)) {
+      v_val <- assocstats(table(df[[cat_vars[i]]], df[[cat_vars[j]]]))$cramer
+      if(!is.na(v_val) && v_val > 0.3) to_keep_cat <- setdiff(to_keep_cat, cat_vars[j])
+    }
+  }
+}
+
+# Selezione Chi^2 (Top 5 rispetto al target)
+p_vals_chi <- sapply(to_keep_cat, function(x) {
+  chisq.test(table(df[[x]], df[[target_col]]))$p.value
+})
+top_categorical <- names(sort(p_vals_chi)[1:min(5, length(p_vals_chi))])
+
+# Dataset finale per i modelli
+final_vars <- c(target_col, final_num_vars, top_categorical)
+df_model <- df[, final_vars]
+print("--- Variabili categoriche selezionate ---")
+print(top_categorical)
+
+#####################################################
+# 5. MODELLO ORDERED LOGIT
+#####################################################
+
+set.seed(123)
+trainIndex <- createDataPartition(df_model[[target_col]], p = .7, list = FALSE)
+data_train <- df_model[trainIndex,]
+data_test  <- df_model[-trainIndex,]
+
+ordinal_model <- polr(Risk_Level ~ ., data = data_train, Hess = TRUE)
+
+print("--- Sommario del Modello Ordered Logit ---")
+summary_model <- summary(ordinal_model)
+
+# Calcolo manuale dei p-value
+ctable <- coef(summary_model)
+p_values <- pnorm(abs(ctable[, "t value"]), lower.tail = FALSE) * 2
+ctable_with_p <- cbind(ctable, "p value" = round(p_values, 4))
+print("--- Coefficienti, t-value e p-value ---")
+print(ctable_with_p)
+
+#####################################################
+# 6. VALUTAZIONE MODELLO
+#####################################################
+
+predictions <- predict(ordinal_model, newdata = data_test)
+print("--- Matrice di Confusione ---")
+print(confusionMatrix(predictions, data_test$Risk_Level))
+
+# 🔹 ROC multiclass indiretta (One vs Rest)
+prob_pred <- predict(ordinal_model, newdata = data_test, type = "probs")
+auc_values <- sapply(1:ncol(prob_pred), function(i) {
+  roc(as.numeric(data_test$Risk_Level == colnames(prob_pred)[i]), prob_pred[, i])$auc
+})
+print("--- AUC per ciascun livello ---")
+print(round(auc_values, 3))
+
+#####################################################
+# 7. TEST CRITICO: ASSUNZIONE DI PARALLEL SLOPES
+#####################################################
+
+# 🔹 Confronto devianza tra modello ordinal (polr) e multinomiale (nnet::multinom)
+multi_model <- multinom(Risk_Level ~ ., data = data_train, trace = FALSE)
+dev_diff <- 2 * (logLik(multi_model) - logLik(ordinal_model))
+df_diff <- attr(logLik(multi_model), "df") - attr(logLik(ordinal_model), "df")
+p_val_diff <- pchisq(dev_diff, df = df_diff, lower.tail = FALSE)
+
+print("--- Test sull’assunzione di proportional odds ---")
+cat("Differenza di devianza =", round(dev_diff,3), 
+    " | df =", df_diff, 
+    " | p-value =", signif(p_val_diff, 4), "\n")
+
+if (p_val_diff < 0.05) {
+  cat("⚠️  L’assunzione di parallel slopes è VIOLATA: considerare modello multinomiale.\n")
+} else {
+  cat("✅  L’assunzione di parallel slopes è plausibile: ordered logit appropriato.\n")
+}
+
+#####################################################
+# 8. OSSERVAZIONI INTERPRETATIVE
+#####################################################
+cat("\n--- NOTE INTERPRETATIVE ---\n")
+cat("• Coefficienti β rappresentano variazioni nel log-odds cumulativo per un incremento di 1 SD della variabile.\n")
+cat("• Cut-points (ζ) definiscono i confini stimati tra categorie di rischio.\n")
+cat("• Se il test di parallel slopes fallisce, discutere il possibile uso di un modello multinomiale o di un partial proportional odds model.\n")
