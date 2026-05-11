@@ -1,0 +1,29 @@
+### 1. Selezione delle Variabili (Feature Selection)
+Il codice ha utilizzato un approccio multi-step per ridurre la dimensionalità mantenendo l'interpretabilità:
+*   **Riduzione della ridondanza:** La matrice di correlazione ha rimosso le variabili con un coefficiente superiore a 0.7 per evitare la multicollinearità.
+*   **PCA come "setaccio":** Analizzando i *loadings* (pesi), sono state identificate le variabili originali che spiegano maggiormente la varianza. Ad esempio, `Stakeholder_Count` (loading 0.538 sulla PC1) e `Project_Start_Month` (loading 0.611 sulla PC2) sono state selezionate come rappresentanti reali delle dimensioni di varianza principali.
+*   **Selezione Qualitativa:** Il test Chi-Quadrato ha isolato i predittori categorici più significativi, come `Org_Process_Maturity` e `Team_Experience_Level`.
+
+### 2. Interpretazione dei Coefficienti del Modello ($\beta$)
+I coefficienti del modello Ordered Logit indicano la variazione nei **log-odds cumulati** di trovarsi in una categoria di rischio superiore:
+*   **Coefficienti Positivi:** Variabili come `External_Dependencies_Count` (0.338) e `Team_Turnover_Rate` (0.274) hanno un effetto positivo e significativo ($p < 0.0001$). Ciò significa che all'aumentare delle dipendenze esterne o del turnover del team, aumenta la probabilità che il progetto sia classificato in un livello di rischio più elevato (es. da Medium ad High).
+*   **Coefficienti Negativi:** La variabile `Org_Process_MaturityOptimizing` (-2.764) ha un forte effetto negativo. Questo indica che una maturità organizzativa elevata ("Optimizing") riduce drasticamente la probabilità di cadere nelle classi di rischio più alte rispetto alla categoria di base.
+*   **Nota Tecnica:** Poiché i dati sono stati scalati, questi valori rappresentano l'effetto dell'incremento di **una deviazione standard** della variabile.
+
+### 3. Punti di Soglia (Cut-points $\zeta$)
+Il modello identifica tre soglie latenti che separano le categorie osservate:
+*   **Low|Medium (-1.579):** È il confine tra il rischio basso e medio.
+*   **Medium|High (0.702):** Il confine tra medio e alto.
+*   **High|Critical (2.482):** Il confine tra alto e critico.
+Questi valori rappresentano i punti sulla variabile latente (propensione al rischio) dove la classificazione "salta" da una categoria all'altra.
+
+### 4. Valutazione delle Performance (Matrice di Confusione e AUC)
+*   **Accuratezza Differenziata:** Il modello è più efficace nel prevedere le categorie estreme. L'**AUC** per la categoria **Low (0.832)** e **Critical (0.818)** è elevata, indicando un'ottima capacità discriminante.
+*   **Difficoltà sulle Categorie Medie:** Per le classi **Medium (0.667)** e **High (0.672)**, l'AUC è sensibilmente più bassa. Questo si riflette nella matrice di confusione, dove molti progetti di rischio "Medium" vengono erroneamente classificati come "Low" (125 casi) o "High" (146 casi), suggerendo una sovrapposizione nelle caratteristiche di questi livelli intermedi.
+
+### 5. Taglio Critico: Violazione dell'Assunzione Fondamentale
+Il risultato più importante per la discussione orale è il **test sull'assunzione delle proporzionalità degli odds (parallel slopes)**:
+*   **Risultato:** Il p-value del test è estremamente basso (**2.14e-05**).
+*   **Interpretazione Critica:** L'assunzione è **VIOLATA**. Questo significa che l'effetto dei predittori non è costante tra le diverse soglie di rischio (ad esempio, il turnover del team potrebbe pesare di più nel passaggio da High a Critical che da Low a Medium).
+*   **Conclusione per il Progetto:** Dovete presentare questo risultato come un **limite del modello Ordered Logit** per questo specifico dataset. In una fase successiva, si dovrebbe considerare l'uso di un modello multinomiale o di un *partial proportional odds model*.
+
