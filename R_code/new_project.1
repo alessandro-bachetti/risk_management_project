@@ -50,14 +50,17 @@ df[[target_col]] <- factor(df[[target_col]],
                            levels = c("Low", "Medium", "High", "Critical"), 
                            ordered = TRUE)
 
-# --- EDA PLOTS (Mantenuti dall'originale) ---
+# --- EDA PLOTS ---
 num_vars <- names(df)[sapply(df, is.numeric)]
+
 numeric_plots <- lapply(num_vars, function(var) {
   ggplot(df, aes(x = .data[[var]])) +
     geom_histogram(bins = 30, fill = "skyblue", color = "black") +
     theme_minimal() + labs(title = var)
 })
 final_numeric_plot <- wrap_plots(numeric_plots, ncol = 5)
+#ggsave("numeric_plots.png", final_numeric_plot, width = 20, height = 15, units = "in", dpi = 300) 
+
 
 cat_vars <- names(df)[sapply(df, is.factor)]
 cat_vars <- cat_vars[cat_vars != target_col]
@@ -69,12 +72,15 @@ categorical_plots <- lapply(cat_vars, function(var) {
     labs(title = var)
 })
 final_cat_plot <- wrap_plots(categorical_plots, ncol = 5)
+#ggsave("categorical_plots.png", final_cat_plot, width = 20, height = 15, units = "in", dpi = 300)
+
 
 #####################################################
 # 3. FEATURE SELECTION (NUMERICHE)
 #####################################################
 
 cor_mat <- cor(df[num_vars])
+corrplot(cor_mat, type = "upper", method = "ellipse", tl.cex = 0.7)
 high_corr <- findCorrelation(cor_mat, cutoff = 0.7, names = TRUE)
 num_vars_filtered <- setdiff(num_vars, high_corr)
 
@@ -86,16 +92,56 @@ top_anova <- names(sort(p_vals_anova)[1:5])
 
 # PCA (Visualizzazione e Contributi)
 pca_res <- princomp(df[num_vars_filtered], cor = TRUE)
+
 fviz_pca_var(pca_res, col.var = "contrib", gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), repel = TRUE)
+
+fviz_contrib(pca_res, choice = "var", axes = 1, top = 10) 
+fviz_contrib(pca_res, choice = "var", axes = 2, top = 10)
+fviz_contrib(pca_res, choice = "var", axes = 3, top = 10)
 
 contributions <- rowSums(pca_res$loadings[, 1:2]^2)
 top_pca <- names(sort(contributions, decreasing = TRUE)[1:5])
 
 final_num_vars <- unique(c(top_anova, top_pca))
+print(final_num_vars)
 
 #####################################################
 # 4. FEATURE SELECTION (CATEGORICHE)
 #####################################################
+
+### Correlation Matrix Categorical Variables
+# Create empty matrix
+n <- length(cat_vars)
+cramer_matrix <- matrix(NA, nrow = n, ncol = n,
+                        dimnames = list(cat_vars, cat_vars))
+
+# Loop through all pairs
+for(i in 1:n){
+  for(j in 1:n){
+    if (i != j) {
+      tab <- table(df[[cat_vars[i]]], df[[cat_vars[j]]])
+      cramer_matrix[i, j] <- assocstats(tab)$cramer
+    } else {
+      cramer_matrix[i, j] <- 1   # variable with itself
+    }
+  }
+}
+
+corrplot(cramer_matrix,
+         tl.srt = 45,
+         type = "upper",
+         method = "ellipse",
+         col = colorRampPalette(c("white", "blue"))(200),
+         tl.cex = 0.8,
+         addCoef.col = "black",
+         number.cex = 0.5,
+         diag = FALSE,
+         is.corr = FALSE,
+         # Margini: c(basso, sinistra, alto, destra)
+         mar = c(0, 0, 3, 0))
+
+mtext("Cramér's V", side = 3, line = -10, cex = 1.2, adj = 0.55)
+
 
 to_keep_cat <- cat_vars
 if(length(cat_vars) > 1) {
