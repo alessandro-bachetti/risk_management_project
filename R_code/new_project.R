@@ -29,7 +29,7 @@ getmode <- function(v) {
 }
 
 #####################################################
-# 2. DATA CLEANING & IMPUTATION + OVERALL EDA
+# 2. DATA CLEANING & IMPUTATION + EDA
 #####################################################
 
 target_col <- "Risk_Level"
@@ -37,7 +37,6 @@ for (col in names(df)) {
   if (col != target_col) {
     if (is.numeric(df[[col]])) {
       df[[col]][is.na(df[[col]])] <- median(df[[col]], na.rm = TRUE)
-      # 🔹 NOTA: Scaling rimosso da qui per evitare data leakage
     } else {
       df[[col]] <- as.factor(df[[col]])
       df[[col]][is.na(df[[col]])] <- getmode(df[[col]])
@@ -74,10 +73,11 @@ categorical_plots <- lapply(cat_vars, function(var) {
 final_cat_plot <- wrap_plots(categorical_plots, ncol = 5)
 #ggsave("categorical_plots.png", final_cat_plot, width = 20, height = 15, units = "in", dpi = 300)
 
+# target variable frequency
 barchart(df[[target_col]])
 
 #####################################################
-# 3. FEATURE SELECTION (NUMERICHE)
+# 3. FEATURE SELECTION (NUM)
 #####################################################
 
 cor_mat <- cor(df[num_vars])
@@ -107,7 +107,7 @@ final_num_vars <- unique(c(top_anova, top_pca))
 print(final_num_vars)
 
 #####################################################
-# 4. FEATURE SELECTION (CATEGORICHE)
+# 4. FEATURE SELECTION (CAT)
 #####################################################
 
 ### Correlation Matrix Categorical Variables
@@ -164,14 +164,13 @@ final_vars <- c(target_col, final_num_vars, top_categorical)
 df_model <- df[, final_vars]
 
 #####################################################
-# 5. SPLIT E SCALING (CORREZIONE DATA LEAKAGE)
+# 5. SPLIT E SCALING
 #####################################################
 set.seed(123)
 trainIndex <- createDataPartition(df_model[[target_col]], p = .7, list = FALSE)
 data_train <- df_model[trainIndex,]
 data_test  <- df_model[-trainIndex,]
 
-# Scaling basato SOLO su training set
 numeric_in_model <- intersect(names(data_train), final_num_vars)
 scaling_params <- preProcess(data_train[, numeric_in_model], method = c("center", "scale"))
 
@@ -179,7 +178,7 @@ data_train[, numeric_in_model] <- predict(scaling_params, data_train[, numeric_i
 data_test[, numeric_in_model]  <- predict(scaling_params, data_test[, numeric_in_model])
 
 #####################################################
-# 6. MODELLO ORDERED LOGIT (POLR)
+# 6. ORDERED LOGIT 
 #####################################################
 
 ordinal_model <- polr(Risk_Level ~ ., data = data_train, Hess = TRUE)
@@ -196,7 +195,6 @@ print(ctable_with_p)
 # 7. ODDS RATIOS & CONFIDENCE INTERVALS
 #####################################################
 
-# 🔹 AGGIUNTA: Calcolo Odds Ratio 
 or_table <- exp(cbind(OR = coef(ordinal_model), confint.default(ordinal_model)))
 print("--- Odds Ratios and 95% CI ---")
 print(round(or_table, 4))
@@ -226,7 +224,7 @@ p_val_slopes <- pchisq(2 * (logLik(multi_check) - logLik(ordinal_model)),
 cat("\nTest Parallel Slopes p-value:", round(p_val_slopes, 4), "\n")
 
 ######################################################
-#9. TEST DI BRANT (AL POSTO DEL PARALLEL SLOPES)
+#9. TEST DI BRANT
 ###################################################### 
 
 res_brant <- brant(ordinal_model)
