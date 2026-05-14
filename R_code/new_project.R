@@ -1,5 +1,5 @@
 #####################################################
-# 1. SETUP E LIBRERIE
+# 1. SETUP & LIBRARIES
 #####################################################
 rm(list = ls())
 library(rstudioapi)
@@ -200,7 +200,7 @@ print("--- Odds Ratios and 95% CI ---")
 print(round(or_table, 4))
 
 #####################################################
-# 8. VALUTAZIONE E ASSUNZIONI
+# 8. EVALUATION & ASSUMPTIONS
 #####################################################
 
 # Accuracy e Matrice Confusione
