@@ -15,6 +15,7 @@ library(corrplot)
 library(vcd)       # Per V-Cramer
 library(factoextra) # Per PCA visualization
 library(pROC)       # Per ROC/AUC
+library(brant)
 
 current_path <- getActiveDocumentContext()$path
 setwd(dirname(current_path))
